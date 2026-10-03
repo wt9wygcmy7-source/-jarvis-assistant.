@@ -1,0 +1,313 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050b16">
+<title>J.A.R.V.I.S.</title>
+<style>
+:root{--blue:#43d9ff;--bg:#050b16;--panel:#0b1728}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at top,#102744,#050b16 65%);
+color:#d9f7ff;font-family:system-ui,Arial,sans-serif;min-height:100vh}
+header{text-align:center;padding:28px 12px 12px}
+h1{font-size:clamp(32px,9vw,52px);letter-spacing:8px;margin:0;color:var(--blue);
+text-shadow:0 0 22px #168cff}
+.sub{font-size:11px;letter-spacing:4px;color:#729ab7}
+main{max-width:620px;margin:auto;padding:14px}
+.panel{background:#091526eF;border:1px solid #1c5272;border-radius:16px;
+padding:17px;margin-bottom:14px;box-shadow:0 0 24px #001c382b}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.small{font-size:12px;color:#8aa9c1}
+#clock{font-size:30px;color:var(--blue);font-variant-numeric:tabular-nums}
+.orb-wrap{display:flex;justify-content:center;padding:18px}
+.orb{width:126px;height:126px;border:2px solid var(--blue);border-radius:50%;
+display:grid;place-items:center;box-shadow:0 0 24px #0d8fff,inset 0 0 22px #0876a855;
+background:radial-gradient(circle,#12375a,#07101d 68%);color:var(--blue);
+font-size:15px;letter-spacing:2px}
+.orb.active{animation:pulse 1.2s infinite}
+@keyframes pulse{50%{box-shadow:0 0 42px #29cfff,inset 0 0 35px #0876a8}}
+button{background:#102940;color:#c8f5ff;border:1px solid #267aa0;border-radius:10px;
+padding:12px 14px;font-size:14px;cursor:pointer}
+button:active{background:#174c6a}
+.primary{background:#073c59;border-color:var(--blue)}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+input{width:100%;background:#030b15;border:1px solid #24506b;border-radius:10px;
+color:white;padding:14px;font-size:16px;min-width:0}
+form{display:flex;gap:8px}
+form button{flex-shrink:0}
+#log{height:210px;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.msg{padding:10px 12px;border-radius:10px;line-height:1.45;font-size:14px;
+overflow-wrap:anywhere}
+.user{background:#10304a;align-self:flex-end;max-width:90%}
+.jarvis{background:#0c1d2c;border:1px solid #163c53;align-self:flex-start;max-width:95%}
+footer{text-align:center;font-size:11px;color:#66839a;padding:10px 0 28px}
+</style>
+</head>
+<body>
+<header>
+  <h1>J.A.R.V.I.S.</h1>
+  <div class="sub">PERSONAL AI INTERFACE</div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="row">
+      <div>
+        <div class="small">SYSTEMZEIT</div>
+        <div id="clock">--:--:--</div>
+      </div>
+      <div style="text-align:right">
+        <div class="small">SYSTEMSTATUS</div>
+        <div style="color:#65f2b1">● ONLINE</div>
+      </div>
+    </div>
+    <div class="orb-wrap">
+      <div id="orb" class="orb">J.A.R.V.I.S.</div>
+    </div>
+    <div class="small" id="status" style="text-align:center">
+      Bereit. Warte auf deinen Befehl.
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="small" style="margin-bottom:12px">KOMMANDOZENTRALE</div>
+    <form id="form">
+      <input id="command" placeholder="Sag mir, was ich tun soll …"
+       autocomplete="off" aria-label="Befehl eingeben">
+      <button class="primary" type="submit">Senden</button>
+    </form>
+    <div class="controls" style="margin-top:10px">
+      <button id="listen">🎙️ Sprechen</button>
+      <button id="stop">🔇 Stumm</button>
+      <button id="time">🕒 Wie spät?</button>
+      <button id="help">❔ Befehle</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="row" style="margin-bottom:12px">
+      <strong>Kommunikationsprotokoll</strong>
+      <button id="clear">Leeren</button>
+    </div>
+    <div id="log" aria-live="polite"></div>
+  </section>
+
+  <section class="panel">
+    <div class="small" style="margin-bottom:8px">NOTIZBLOCK</div>
+    <form id="noteForm">
+      <input id="note" placeholder="Notiz für später …" maxlength="300">
+      <button type="submit">Speichern</button>
+    </form>
+    <div id="notes" style="margin-top:12px;font-size:13px"></div>
+  </section>
+</main>
+
+<footer>
+  JARVIS PERSONAL PROJECT · LOKALE BEFEHLE · V1.0
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let recognition = null;
+let listening = false;
+
+function tick(){
+  const now = new Date();
+  $("clock").textContent = now.toLocaleTimeString("de-DE");
+}
+tick();
+setInterval(tick,1000);
+
+function say(text){
+  $("status").textContent = text;
+  if (!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "de-DE";
+  utterance.rate = 0.96;
+  utterance.pitch = 0.88;
+  speechSynthesis.speak(utterance);
+}
+
+function message(text, who){
+  const div = document.createElement("div");
+  div.className = "msg " + who;
+  div.textContent = (who === "user" ? "DU: " : "JARVIS: ") + text;
+  $("log").appendChild(div);
+  $("log").scrollTop = $("log").scrollHeight;
+}
+
+function reply(text){
+  message(text,"jarvis");
+  say(text);
+}
+
+const helpText =
+"Du kannst sagen: Wie spät ist es, welches Datum ist heute, " +
+"öffne YouTube, öffne Google, öffne Wikipedia, " +
+"öffne ChatGPT, merke dir [dein Text], zeige meine Notizen " +
+"oder Hilfe. Ich führe nur die eingebauten Befehle aus.";
+
+function openSite(url){
+  const tab = window.open(url,"_blank","noopener,noreferrer");
+  if (!tab) reply("Der Browser hat das Öffnen blockiert. Erlaube Pop-ups oder öffne die Website manuell.");
+}
+
+function runCommand(raw){
+  const text = raw.trim();
+  const cmd = text.toLowerCase();
+  if (!text) return;
+  message(text,"user");
+
+  if (/\b(hilfe|befehle|was kannst du|kommandos)\b/.test(cmd)){
+    reply(helpText);
+  } else if (/\b(wie spät|uhrzeit|wieviel uhr)\b/.test(cmd)){
+    reply("Es ist " + new Date().toLocaleTimeString("de-DE",
+      {hour:"2-digit",minute:"2-digit"}) + " Uhr.");
+  } else if (/\b(datum|welcher tag|welches datum|heute für ein tag)\b/.test(cmd)){
+    reply("Heute ist " + new Date().toLocaleDateString("de-DE",
+      {weekday:"long",day:"numeric",month:"long",year:"numeric"}) + ".");
+  } else if (/\b(öffne|öffnen|starte)\b/.test(cmd) && cmd.includes("youtube")){
+    reply("Ich öffne YouTube.");
+    openSite("https://www.youtube.com/");
+  } else if (/\b(öffne|öffnen|starte)\b/.test(cmd) && cmd.includes("google")){
+    reply("Ich öffne Google.");
+    openSite("https://www.google.com/");
+  } else if (/\b(öffne|öffnen|starte)\b/.test(cmd) && cmd.includes("wikipedia")){
+    reply("Ich öffne Wikipedia.");
+    openSite("https://de.wikipedia.org/");
+  } else if (/\b(öffne|öffnen|starte)\b/.test(cmd) && cmd.includes("chatgpt")){
+    reply("Ich öffne ChatGPT.");
+    openSite("https://chatgpt.com/");
+  } else if (cmd.startsWith("merke dir ") || cmd.startsWith("notiz ")){
+    const content = text.replace(/^(merke dir|notiz)\s+/i,"").trim();
+    if (!content){ reply("Was soll ich mir merken?"); return; }
+    const notes = getNotes();
+    notes.push({text:content,date:new Date().toLocaleString("de-DE")});
+    saveNotes(notes);
+    renderNotes();
+    reply("Notiz gespeichert. Du kannst sie später wieder anzeigen.");
+  } else if (/\b(zeige|zeig|lies)\b/.test(cmd) && cmd.includes("notiz")){
+    const notes = getNotes();
+    reply(notes.length
+      ? "Du hast " + notes.length + " Notizen gespeichert. Du findest sie im Notizblock unter dem Kommunikationsprotokoll."
+      : "Du hast noch keine Notizen gespeichert.");
+  } else if (/\b(hallo|hi jarvis|hey jarvis|guten morgen|guten abend)\b/.test(cmd)){
+    reply("Hallo Dima! JARVIS ist bereit. Was kann ich für dich tun?");
+  } else if (/\b(wie heißt du|wer bist du)\b/.test(cmd)){
+    reply("Ich bin JARVIS, dein persönlicher Assistent-Prototyp.");
+  } else if (/\b(danke|vielen dank)\b/.test(cmd)){
+    reply("Gern geschehen. Ich stehe bereit.");
+  } else {
+    reply("Diesen Befehl kenne ich noch nicht. Sag Hilfe, um meine verfügbaren Befehle zu sehen. Für freie KI-Gespräche muss später ein KI-Dienst angebunden werden.");
+  }
+}
+
+$("form").addEventListener("submit",e=>{
+  e.preventDefault();
+  const value = $("command").value;
+  $("command").value = "";
+  runCommand(value);
+});
+
+$("time").addEventListener("click",()=>runCommand("Wie spät ist es?"));
+$("help").addEventListener("click",()=>runCommand("Hilfe"));
+$("clear").addEventListener("click",()=>{$("log").replaceChildren()});
+$("stop").addEventListener("click",()=>{
+  if(recognition) recognition.stop();
+  listening = false;
+  $("orb").classList.remove("active");
+  window.speechSynthesis?.cancel();
+  $("status").textContent = "Sprachausgabe gestoppt.";
+});
+
+const SpeechRecognition =
+  window.SpeechRecognition || window.webkitSpeechRecognition;
+
+$("listen").addEventListener("click",()=>{
+  if(!SpeechRecognition){
+    reply("Dein Browser unterstützt hier keine Spracheingabe. Bitte nutze einen aktuellen Browser oder tippe deinen Befehl ein.");
+    return;
+  }
+  if(listening && recognition){ recognition.stop(); return; }
+  recognition = new SpeechRecognition();
+  recognition.lang = "de-DE";
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.onstart = ()=>{
+    listening = true;
+    $("orb").classList.add("active");
+    $("status").textContent = "Ich höre zu …";
+  };
+  recognition.onresult = e=>{
+    const text = e.results[0][0].transcript;
+    $("command").value = text;
+    runCommand(text);
+  };
+  recognition.onerror = ()=>{
+    $("status").textContent = "Spracheingabe nicht verfügbar. Prüfe Mikrofonberechtigung und Internetverbindung.";
+  };
+  recognition.onend = ()=>{
+    listening = false;
+    $("orb").classList.remove("active");
+  };
+  try { recognition.start(); }
+  catch(e){ $("status").textContent = "Bitte versuche es erneut."; }
+});
+
+function getNotes(){
+  try { return JSON.parse(localStorage.getItem("jarvis-notes") || "[]"); }
+  catch(e){ return []; }
+}
+function saveNotes(notes){
+  try { localStorage.setItem("jarvis-notes",JSON.stringify(notes)); }
+  catch(e){ reply("Speichern ist in diesem Browser nicht verfügbar."); }
+}
+function renderNotes(){
+  const box = $("notes");
+  box.replaceChildren();
+  const notes = getNotes();
+  if(!notes.length){
+    box.textContent = "Noch keine Notizen.";
+    return;
+  }
+  notes.forEach((note,index)=>{
+    const item = document.createElement("div");
+    item.style.cssText = "padding:10px 0;border-bottom:1px solid #17364b";
+    const content = document.createElement("div");
+    content.textContent = note.text;
+    const meta = document.createElement("div");
+    meta.className = "small";
+    meta.style.marginTop = "4px";
+    meta.textContent = note.date || "";
+    const remove = document.createElement("button");
+    remove.textContent = "Löschen";
+    remove.style.marginTop = "7px";
+    remove.addEventListener("click",()=>{
+      const updated = getNotes();
+      updated.splice(index,1);
+      saveNotes(updated);
+      renderNotes();
+    });
+    item.append(content,meta,remove);
+    box.appendChild(item);
+  });
+}
+$("noteForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const text = $("note").value.trim();
+  if(!text) return;
+  const notes = getNotes();
+  notes.push({text,date:new Date().toLocaleString("de-DE")});
+  saveNotes(notes);
+  renderNotes();
+  $("note").value = "";
+  say("Deine Notiz wurde gespeichert.");
+});
+renderNotes();
+message("System gestartet. Sag Hilfe für eine Liste der Befehle.","jarvis");
+</script>
+</body>
+</html>
